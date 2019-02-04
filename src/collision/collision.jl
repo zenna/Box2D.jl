@@ -3,6 +3,10 @@ The features that intersect to form the contact point
 This must be 4 bytes or less.
 """
 struct ContactFeature
+  indexA::UInt8
+  indexB::UInt8
+  typeA::UInt8
+  typeB::UInt8
 end
 
 struct Key
@@ -30,6 +34,32 @@ struct ManifoldPoint{V <: Vec2, T <: Real, CID <: ContactID}
 	normalImpulse::T;	# the non-penetration impulse
 	tangentImpulse::T	# the friction impulse
 	id::CID		       	# uniquely identifies a contact point between two shapes
+end
+
+"""
+A manifold for two touching convex shapes.
+Box2D supports multiple types of contact:
+- clip point versus plane with radius
+- point versus point with radius (circles)
+The local point usage depends on the manifold type:
+-e_circles: the local center of circleA
+-e_faceA: the center of faceA
+-e_faceB: the center of faceB
+Similarly the local normal usage:
+-e_circles: not used
+-e_faceA: the normal on polygonA
+-e_faceB: the normal on polygonB
+We store contacts in this way so that position correction can
+account for movement, which is critical for continuous physics.
+All contact scenarios must be expressed in one of these types.
+This structure is stored across time steps, so we keep it small.
+"""
+struct Manifold{V2}
+  points::Vector{ManifoldPoint} # max length is b2_maxManifoldPoints the points of contact
+	localNormal::V2								# not use for Type::e_points
+	localPoint::V2								# usage depends on manifold type
+	type::Type # zt: What is this 
+  pointCount::Int32 ;		
 end
 
 "This is used to compute the current state of a contact manifold."

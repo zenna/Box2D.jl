@@ -70,58 +70,130 @@ end
 function BodyDef()
   BodyDef{Vec2f0, Float32}(
     userData = nullptr,
-    position.Set(0.0f, 0.0f),
-    angle = 0.0f,
-    linearVelocity.Set(0.0f, 0.0f),
-    angularVelocity = 0.0f,
-    linearDamping = 0.0f,
-    angularDamping = 0.0f,
+    position.Set(0.0f0, 0.0f0),
+    angle = 0.0f0,
+    linearVelocity.Set(0.0f0, 0.0f0),
+    angularVelocity = 0.0f0,
+    linearDamping = 0.0f0,
+    angularDamping = 0.0f0,
     allowSleep = true,
     awake = true,
     fixedRotation = false,
     bullet = false,
     type = b2_staticBody,
     active = true,
-    gravityScale = 1.0f,)
+    gravityScale = 1.0f0)
 end
 
-/// A rigid body. These are created via b2World::CreateBody.
-class b2Body
-{
-public:
-	/// Creates a fixture and attach it to this body. Use this function if you need
-	/// to set some fixture parameters, like friction. Otherwise you can create the
-	/// fixture directly from a shape.
-	/// If the density is non-zero, this function automatically updates the mass of the body.
-	/// Contacts are not created until the next time step.
-	/// @param def the fixture definition.
-	/// @warning This function is locked during callbacks.
-	b2Fixture* CreateFixture(const b2FixtureDef* def);
+"A rigid body. These are created via b2World::CreateBody."
+struct Body{F}
+	m_type::BodyType
+	m_flags::Uint16
+	m_islandIndex::Int32
+	m_xf::b2Transform		# the body origin transform
+	m_sweep::b2Sweep		# the swept motion for CCD
+	m_linearVelocity::b2Vec2
+	m_angularVelocity::float32
+	m_force::b2Vec2
+	m_torque::float32
+	m_world::World 
+	m_prev::Body
+	m_next::Body
+	m_fixtureList::Fixture
+	m_fixtureCount::Int32
+	m_jointList::JointEdge
+	m_contactList::ContactEdge
+  m_mass::F
+  m_invMass::F
+	# Rotational inertia about the center of mass.
+  m_I::F
+  m_invI::F
+	m_linearDamping::F
+	m_angularDamping::F
+	m_gravityScale::F
+	m_sleepTime::F
+	m_userData
+end
 
-	/// Creates a fixture from a shape and attach it to this body.
-	/// This is a convenience function. Use b2FixtureDef if you need to set parameters
-	/// like friction, restitution, user data, or filtering.
-	/// If the density is non-zero, this function automatically updates the mass of the body.
-	/// @param shape the shape to be cloned.
-	/// @param density the shape density (set to zero for static bodies).
-	/// @warning This function is locked during callbacks.
-	b2Fixture* CreateFixture(const b2Shape* shape, float32 density);
+"""
+Creates a fixture and attach it to this body. Use this function if you need
+to set some fixture parameters, like friction. Otherwise you can create the
+fixture directly from a shape.
+If the density is non-zero, this function automatically updates the mass of the body.
+Contacts are not created until the next time step.
+@param def the fixture definition.
+@warning This function is locked during callbacks.
+"""
+function CreateFixture(const b2FixtureDef* def)
+  @pre !islocked(m_world)
+  b2Assert(m_world->IsLocked() == false);
+	if (m_world->IsLocked() == true)
+	{
+		return nullptr;
+	}
 
-	/// Destroy a fixture. This removes the fixture from the broad-phase and
-	/// destroys all contacts associated with this fixture. This will
-	/// automatically adjust the mass of the body if the body is dynamic and the
-	/// fixture has positive density.
-	/// All fixtures attached to a body are implicitly destroyed when the body is destroyed.
-	/// @param fixture the fixture to be removed.
-	/// @warning This function is locked during callbacks.
-	void DestroyFixture(b2Fixture* fixture);
+  # Memory stuff...
+	b2BlockAllocator* allocator = &m_world->m_blockAllocator;
+	void* memory = allocator->Allocate(sizeof(b2Fixture));
+	b2Fixture* fixture = new (memory) b2Fixture;
+	fixture->Create(allocator, this, def);
 
-	/// Set the position of the body's origin and rotation.
-	/// Manipulating a body's transform may cause non-physical behavior.
-	/// Note: contacts are updated on the next call to b2World::Step.
-	/// @param position the world position of the body's local origin.
-	/// @param angle the world rotation in radians.
-	void SetTransform(const b2Vec2& position, float32 angle);
+	if (m_flags & e_activeFlag)
+	{
+		b2BroadPhase* broadPhase = &m_world->m_contactManager.m_broadPhase;
+		fixture->CreateProxies(broadPhase, m_xf);
+	}
+
+	fixture->m_next = m_fixtureList;
+	m_fixtureList = fixture;
+	++m_fixtureCount;
+
+	fixture->m_body = this;
+
+	# Adjust mass properties if needed.
+	if (fixture->m_density > 0.0f)
+	{
+		ResetMassData();
+	}
+
+	# Let the world know we have a new fixture. This will cause new contacts
+	# to be created at the beginning of the next time step.
+	m_world->m_flags |= b2World::e_newFixture;
+
+	return fixture
+end
+
+"""
+Creates a fixture from a shape and attach it to this body.
+This is a convenience function. Use b2FixtureDef if you need to set parameters
+like friction, restitution, user data, or filtering.
+If the density is non-zero, this function automatically updates the mass of the body.
+@param shape the shape to be cloned.
+@param density the shape density (set to zero for static bodies).
+@warning This function is locked during callbacks.
+"""
+function CreateFixture(const b2Shape* shape, float32 density) end
+
+"""
+Destroy a fixture. This removes the fixture from the broad-phase and
+destroys all contacts associated with this fixture. This will
+automatically adjust the mass of the body if the body is dynamic and the
+fixture has positive density.
+All fixtures attached to a body are implicitly destroyed when the body is destroyed.
+@param fixture the fixture to be removed.
+@warning This function is locked during callbacks.
+"""
+function DestroyFixture(b2Fixture* fixture) end
+
+"""
+Set the position of the body's origin and rotation.
+Manipulating a body's transform may cause non-physical behavior.
+Note: contacts are updated on the next call to b2World::Step.
+@param position the world position of the body's local origin.
+@param angle the world rotation in radians.
+"""
+function SetTransform(const b2Vec2& position, float32 angle) end
+
 
 	/// Get the body transform for the body's origin.
 	/// @return the world transform of the body's origin.
@@ -394,43 +466,6 @@ private:
 
 	void Advance(float32 t);
 
-	b2BodyType m_type;
-
-	uint16 m_flags;
-
-	int32 m_islandIndex;
-
-	b2Transform m_xf;		// the body origin transform
-	b2Sweep m_sweep;		// the swept motion for CCD
-
-	b2Vec2 m_linearVelocity;
-	float32 m_angularVelocity;
-
-	b2Vec2 m_force;
-	float32 m_torque;
-
-	b2World* m_world;
-	b2Body* m_prev;
-	b2Body* m_next;
-
-	b2Fixture* m_fixtureList;
-	int32 m_fixtureCount;
-
-	b2JointEdge* m_jointList;
-	b2ContactEdge* m_contactList;
-
-	float32 m_mass, m_invMass;
-
-	// Rotational inertia about the center of mass.
-	float32 m_I, m_invI;
-
-	float32 m_linearDamping;
-	float32 m_angularDamping;
-	float32 m_gravityScale;
-
-	float32 m_sleepTime;
-
-	void* m_userData;
 };
 
 inline b2BodyType b2Body::GetType() const
