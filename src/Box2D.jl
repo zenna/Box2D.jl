@@ -9,7 +9,7 @@ include("shapes/b2Shape.jl")
 
 
 include("collision/collision.jl")
-include("collision/dynamictree.jl")
+# include("collision/dynamictree.jl")
 
 
 end # module

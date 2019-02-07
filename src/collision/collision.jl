@@ -1,3 +1,5 @@
+@enum ContactFeatureType e_vertex = 0 e_face = 1
+
 """
 The features that intersect to form the contact point
 This must be 4 bytes or less.
@@ -15,7 +17,6 @@ end
 
 "Contact ids to facilitate warm starting."
 const ContactID = Union{ContactFeature, Key}
-
 
 """
 A manifold point is a contact point belonging to a contact
@@ -35,6 +36,8 @@ struct ManifoldPoint{V <: Vec2, T <: Real, CID <: ContactID}
 	tangentImpulse::T	# the friction impulse
 	id::CID		       	# uniquely identifies a contact point between two shapes
 end
+
+@enum ManifoldType e_circles = 0 e_faceA = 1 e_faceB = 2
 
 """
 A manifold for two touching convex shapes.
@@ -58,66 +61,60 @@ struct Manifold{V2}
   points::Vector{ManifoldPoint} # max length is b2_maxManifoldPoints the points of contact
 	localNormal::V2								# not use for Type::e_points
 	localPoint::V2								# usage depends on manifold type
-	type::Type # zt: What is this 
-  pointCount::Int32 ;		
+	type::ManifoldType
+  pointCount::Int32		
 end
 
 "This is used to compute the current state of a contact manifold."
-struct WorldManifold
-
-	void Initialize(const b2Manifold* manifold,
-					const b2Transform& xfA, float32 radiusA,
-					const b2Transform& xfB, float32 radiusB);
-
-	b2Vec2 normal;								///< world vector pointing from A to B
-	b2Vec2 points[b2_maxManifoldPoints];		///< world contact point (point of intersection)
-	float32 separations[b2_maxManifoldPoints];	///< a negative value indicates overlap, in meters
+struct WorldManifold{V2 <: Vec2, V2s <: AbstractVector{V2}, F}
+	normal::V2 																	# world vector pointing from A to B
+	points::V2s				# world contact point (point of intersection)
+	separations::F 	# a negative value indicates overlap, in meters
 end
 
-"""
-/// Evaluate the manifold with supplied transforms. This assumes
-/// modest motion from the original state. This does not change the
-/// point count, impulses, etc. The radii must come from the shapes
-/// that generated the manifold.
-"""
-initialize()
-  b2Vec2 normal;								///< world vector pointing from A to B
-  b2Vec2 points[b2_maxManifoldPoints];		///< world contact point (point of intersection)
-  float32 separations[b2_maxManifoldPoints];	///< a negative value indicates overlap, in meters
-end 
+# zt: points and separations should have maxsixze [b2_maxManifoldPoints] 
 
-/// This is used for determining the state of contact points.
-enum b2PointState
-{
-	b2_nullState,		///< point does not exist
-	b2_addState,		///< point was added in the update
-	b2_persistState,	///< point persisted across the update
-	b2_removeState		///< point was removed in the update
-};
+"""
+Evaluate the manifold with supplied transforms. This assumes
+modest motion from the original state. This does not change the
+point count, impulses, etc. The radii must come from the shapes
+that generated the manifold.
+"""
+function Initialize(const b2Manifold* manifold,
+					const b2Transform& xfA, float32 radiusA,
+					const b2Transform& xfB, float32 radiusB);
+end
 
-/// Compute the point states given two manifolds. The states pertain to the transition from manifold1
-/// to manifold2. So state1 is either persist or remove while state2 is either add or persist.
+
+# This is used for determining the state of contact points.
+@enum b2PointState begin
+	b2_nullState		# point does not exist
+	b2_addState		# point was added in the update
+	b2_persistState	# point persisted across the update
+	b2_removeState		# point was removed in the update
+end
+
+# Compute the point states given two manifolds. The states pertain to the transition from manifold1
+# to manifold2. So state1 is either persist or remove while state2 is either add or persist.
 void b2GetPointStates(b2PointState state1[b2_maxManifoldPoints], b2PointState state2[b2_maxManifoldPoints],
 					  const b2Manifold* manifold1, const b2Manifold* manifold2);
 
-/// Used for computing contact manifolds.
-struct b2ClipVertex
-{
-	b2Vec2 v;
-	b2ContactID id;
-};
+"Used for computing contact manifolds."
+struct ClipVertex{V2 <: Vec2, CID <: ContactID}
+	v::V2
+	id::CID
+end
 
-/// Ray-cast input data. The ray extends from p1 to p1 + maxFraction * (p2 - p1).
-struct b2RayCastInput
-{
-	b2Vec2 p1, p2;
-	float32 maxFraction;
-};
+# Ray-cast input data. The ray extends from p1 to p1 + maxFraction * (p2 - p1).
+struct RayCastInput{V2 <: Vec2, F}
+	p1::V2
+	p2::V2
+	maxFraction::F
+end
 
-/// Ray-cast output data. The ray hits at p1 + fraction * (p2 - p1), where p1 and p2
-/// come from b2RayCastInput.
-struct b2RayCastOutput
-{
-	b2Vec2 normal;
-	float32 fraction;
-};
+# Ray-cast output data. The ray hits at p1 + fraction * (p2 - p1), where p1 and p2
+# come from b2RayCastInput.
+struct RayCastOutput{V2, F}
+	normal::V2
+	fraction::F
+end
