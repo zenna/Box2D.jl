@@ -5,6 +5,8 @@ using DocStringExtensions
 using LinearAlgebra
 
 include("common/b2settings.jl")
+include("common/math.jl")
+
 include("shapes/b2Shape.jl")
 
 

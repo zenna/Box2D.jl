@@ -67,9 +67,9 @@ end
 
 "This is used to compute the current state of a contact manifold."
 struct WorldManifold{V2 <: Vec2, V2s <: AbstractVector{V2}, F}
-	normal::V2 																	# world vector pointing from A to B
+	normal::V2 				# world vector pointing from A to B
 	points::V2s				# world contact point (point of intersection)
-	separations::F 	# a negative value indicates overlap, in meters
+	separations::F 	  # a negative value indicates overlap, in meters
 end
 
 # zt: points and separations should have maxsixze [b2_maxManifoldPoints] 
@@ -80,18 +80,60 @@ modest motion from the original state. This does not change the
 point count, impulses, etc. The radii must come from the shapes
 that generated the manifold.
 """
-function Initialize(const b2Manifold* manifold,
-					const b2Transform& xfA, float32 radiusA,
-					const b2Transform& xfB, float32 radiusB);
+function initialize(manifold,
+									  xfA::Transform, radiusA::F,
+									  xfB::Transform, radiusB::F) where F <: Real
+	if manifold.pointcount == 0
+		return
+	end
+
+	if manifold.type == Manifold.circles
+		normal = Vec2(1, 0)
+		pointA = xfA * manifold.localPoint
+		pointB = xfB * manifold.points[1].localPoint
+		if normsquare(pointA, pointB) > eps(F) * eps(F)
+			normal = normalize(pointB - pointA) # zt does distance change point
+		end
+		ca = pointA + radiusA * normal
+		cb = pointB - radiusB * normal
+		points[1] = 0.5 * cA + cB # zt F type
+		separations[1] =  dot((cB - cA), normal)
+		return WorldManifold(normal, points, separations)
+	elseif manifold.type == e_faceA
+		normal = xfA.q * manifold.localNormal
+		planepoint = xfA * localPoint
+		for i = i:manifold.pointCount
+			clippoint = xfB * manifold.points[i].localPoint
+			cA = clipPoint + (radiusA - dot(clippoint - planepoint, normal)) * normal
+			cB = clippoint - radiusB * normal
+			points[i] = T(0.5) * (cA + cB)
+			seperations[i] = dot(cb - cA, normal)
+			return WorldManifold(normal, points, separations)
+		end
+	elseif manifold.type == e_faceB
+		normal = xfB.q * manifold.localNormal
+		planePoint = xfB * manifold.localPoint
+		for i = 1:manifold.pointCount
+			clipPoint = xfA * manifold.points[i].localPoint
+			cB = clipPoint + (radiusB - Dot(clipPoint - planePoint, normal)) * normal
+			cA = clipPoint - radiusA * normal
+			points[i] = T(0.5f) * (cA + cB);
+			separations[i] = b2Dot(cA - cB, normal);
+		end
+
+		# Ensure normal points from A to B.
+		normal = -normal
+		WorldManifold(normal, points, separations)
+	end
 end
 
 
 # This is used for determining the state of contact points.
 @enum b2PointState begin
-	b2_nullState		# point does not exist
-	b2_addState		# point was added in the update
-	b2_persistState	# point persisted across the update
-	b2_removeState		# point was removed in the update
+	nullState		# point does not exist
+	addState		# point was added in the update
+	persistState	# point persisted across the update
+	removeState		# point was removed in the update
 end
 
 # Compute the point states given two manifolds. The states pertain to the transition from manifold1
