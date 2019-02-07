@@ -1,5 +1,5 @@
 "Mass data computed for a shape."
-struct b2MassData{M <: Real, C <: Vec2, I <: Real}
+struct MassData{M <: Real, C <: Vec2, I <: Real}
   mass::M    # The mass of the shape, usually in kilograms.
   center::C  # The position of the shape's centroid relative to the shape's origin.
   I::I       # The rotational inertia of the shape about the local origin.
